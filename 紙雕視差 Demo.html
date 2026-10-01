@@ -1,0 +1,417 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>紙雕視差 Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@600;900&family=Noto+Sans+TC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: 滿版紙雕場景在上，下方是控制面板與說明，窄螢幕堆疊成單欄 */
+:root {
+  --bg: #eef1f2;
+  --surface: #ffffff;
+  --fg: #1c2a36;
+  --muted: #5d6d7a;
+  --line: #d3dbe0;
+  --accent: #2f6f8f;
+  --accent-soft: #dcebf2;
+  --font-display: "Noto Serif TC", "Songti TC", serif;
+  --font-body: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11181f; --surface: #18222b; --fg: #e3eaef; --muted: #93a4b1;
+    --line: #2a3843; --accent: #7fb9d6; --accent-soft: #1f3442; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11181f; --surface: #18222b; --fg: #e3eaef; --muted: #93a4b1;
+  --line: #2a3843; --accent: #7fb9d6; --accent-soft: #1f3442; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.7;
+  padding-inline: 16px; padding-block: 20px 48px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; gap: 20px; }
+
+header h1 {
+  font-family: var(--font-display); font-weight: 900; font-size: clamp(24px, 4vw, 34px);
+  margin: 0; letter-spacing: .02em; text-wrap: balance;
+}
+header p { margin: 4px 0 0; color: var(--muted); }
+
+/* ===== 場景 ===== */
+.scene {
+  position: relative; width: 100%; max-width: 100%;
+  aspect-ratio: 16 / 9; max-height: 72vh;
+  overflow: hidden; border-radius: 6px;
+  background: linear-gradient(#8fb0c4 0%, #c7d7dc 55%, #e6e2d6 100%);
+  box-shadow: 0 1px 0 rgba(0,0,0,.04), 0 18px 40px -20px rgba(20,40,60,.45);
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+.layer {
+  position: absolute;
+  inset: -8%;               /* 超出容器，移動時不露邊 */
+  will-change: transform;
+  pointer-events: none;
+}
+.layer svg { width: 100%; height: 100%; display: block; }
+.layer.shadowed svg { filter: drop-shadow(0 6px 5px rgba(10,25,40,.35)); }
+
+.paper-grain {
+  position: absolute; inset: 0; pointer-events: none; opacity: .35; mix-blend-mode: multiply;
+}
+.tag {
+  position: absolute; font: 600 11px/1 var(--font-mono);
+  color: #fff; background: rgba(10,25,40,.7); padding: 4px 7px; border-radius: 3px;
+  white-space: nowrap; letter-spacing: .03em;
+}
+.scene:not(.show-tags) .tag { display: none; }
+.scene-caption {
+  position: absolute; left: 12px; bottom: 10px; z-index: 50;
+  font: 500 11px/1 var(--font-mono); color: rgba(255,255,255,.85);
+  background: rgba(10,25,40,.45); padding: 5px 8px; border-radius: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== 面板 ===== */
+.panel {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px 28px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 18px 20px;
+}
+.ctl { display: grid; gap: 6px; min-width: 0; }
+.ctl label { font-weight: 500; display: flex; justify-content: space-between; gap: 8px; }
+.ctl output { font-family: var(--font-mono); color: var(--accent); font-variant-numeric: tabular-nums; }
+.ctl small { color: var(--muted); line-height: 1.5; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.ctl-title { font-weight: 500; }
+.seg-row { display: flex; align-items: center; gap: 10px; }
+.seg-label { color: var(--muted); font-size: 13px; width: 2.5em; flex: none; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
+.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg label {
+  padding: 3px 14px; cursor: pointer; font-size: 13px; color: var(--muted);
+  display: block; user-select: none;
+}
+.seg label + input + label { border-left: 1px solid var(--line); }
+.seg input:checked + label { background: var(--accent); color: var(--surface); }
+.seg input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: -2px; }
+.checks { display: grid; gap: 8px; align-content: start; }
+.checks label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.notes {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px 32px;
+}
+.notes section { min-width: 0; }
+.notes h2 {
+  font-family: var(--font-display); font-size: 18px; margin: 0 0 6px; font-weight: 600;
+}
+.notes p, .notes li { color: var(--muted); max-width: 62ch; }
+.notes ul { margin: 0; padding-left: 1.2em; }
+code {
+  font-family: var(--font-mono); font-size: .88em; background: var(--accent-soft);
+  color: var(--fg); padding: 1px 5px; border-radius: 3px;
+}
+.rm-note { display: none; color: var(--muted); font-size: 13px; }
+@media (prefers-reduced-motion: reduce) { .rm-note { display: block; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>紙雕視差 Demo</h1>
+    <p>把滑鼠移到畫面上（手機可用手指拖曳）。近景移動幅度大、遠景小，層層之間就會出現景深。</p>
+  </header>
+
+  <div class="scene show-tags" id="scene" aria-label="紙雕風景，隨滑鼠產生視差">
+    <!-- 圖層由 JS 產生，每層帶 data-depth -->
+    <svg class="paper-grain" aria-hidden="true">
+      <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/><feColorMatrix values="0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .5  0 0 0 .35 0"/></filter>
+      <rect width="100%" height="100%" filter="url(#grain)"/>
+    </svg>
+    <div class="scene-caption" id="readout">x 0.00 · y 0.00</div>
+  </div>
+
+  <div class="panel">
+    <div class="ctl">
+      <label for="amp">移動幅度 <output id="ampOut">40px</output></label>
+      <input type="range" id="amp" min="0" max="120" value="40">
+      <small>depth = 1 的近景最多位移多少像素。實務上 20–40px 通常剛好。</small>
+    </div>
+    <div class="ctl">
+      <label for="ease">平滑係數（lerp） <output id="easeOut">0.08</output></label>
+      <input type="range" id="ease" min="0.02" max="1" step="0.01" value="0.08">
+      <small>每幀往目標靠近的比例。調到 1 等於沒有緩動，可以比較差別。</small>
+    </div>
+    <div class="ctl">
+      <span class="ctl-title">位移方向（Invert X / Y）</span>
+      <div class="seg-row">
+        <span class="seg-label">水平</span>
+        <div class="seg" role="radiogroup" aria-label="水平方向">
+          <input type="radio" name="dirX" id="dirX-inv" value="invert" checked><label for="dirX-inv">反向</label>
+          <input type="radio" name="dirX" id="dirX-fol" value="follow"><label for="dirX-fol">同向</label>
+        </div>
+      </div>
+      <div class="seg-row">
+        <span class="seg-label">垂直</span>
+        <div class="seg" role="radiogroup" aria-label="垂直方向">
+          <input type="radio" name="dirY" id="dirY-inv" value="invert" checked><label for="dirY-inv">反向</label>
+          <input type="radio" name="dirY" id="dirY-fol" value="follow"><label for="dirY-fol">同向</label>
+        </div>
+      </div>
+      <small>反向：圖層往滑鼠反方向移，像鏡頭轉向滑鼠在看。同向：圖層跟著滑鼠走，像整個場景被滑鼠推著。</small>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" id="tags" checked> 顯示每層的 depth 標籤</label>
+      <label><input type="checkbox" id="shadow" checked> 圖層陰影（紙雕感）</label>
+      <label><input type="checkbox" id="drift" checked> 閒置時自動輕微飄動</label>
+      <label><input type="checkbox" id="vertical" checked> 包含上下方向的位移</label>
+      <p class="rm-note">你的系統開啟了「減少動態效果」，所以預設幅度較小。</p>
+    </div>
+  </div>
+
+  <div class="notes">
+    <section>
+      <h2>這個 demo 的結構</h2>
+      <ul>
+        <li>7 個圖層，每層都是透明背景的 SVG，用 <code>position:absolute</code> 疊在一起，DOM 順序即前後關係。</li>
+        <li>每層寫上 <code>data-depth</code>，從天空 0 到前景 1。JS 只讀這個值，不寫死層數。</li>
+        <li>圖層用 <code>inset:-8%</code> 比容器大一圈，移動時邊緣不會露白。</li>
+      </ul>
+    </section>
+    <section>
+      <h2>動畫怎麼跑</h2>
+      <ul>
+        <li><code>pointermove</code> 只更新目標值（正規化成 −1 到 1），不直接動圖層。</li>
+        <li><code>requestAnimationFrame</code> 迴圈用 lerp 讓目前值追目標值，再以 <code>translate3d</code> 移動各層。</li>
+        <li>方向切換只是在位移量前面乘上 <code>-1</code> 或 <code>1</code>，水平、垂直各自獨立。</li>
+        <li>數值收斂、又沒有自動飄動時迴圈會停下；場景離開畫面時也會暫停。</li>
+      </ul>
+    </section>
+    <section>
+      <h2>換成你自己的圖</h2>
+      <p>把某一層的 SVG 換成 <code>&lt;img src="layer3.webp"&gt;</code>，保留外層的 <code>div.layer</code> 和 <code>data-depth</code>，JS 完全不用改。</p>
+    </section>
+  </div>
+</div>
+
+<script>
+(() => {
+  const scene = document.getElementById('scene');
+  const W = 1400, H = 800;
+
+  // --- 可重現的亂數，讓每次載入山形一致 ---
+  function rng(seed) {
+    return () => {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  // 產生山稜線：回傳點陣列
+  function ridgePoints(seed, baseY, amp, count) {
+    const r = rng(seed), pts = [];
+    for (let i = 0; i <= count; i++) {
+      const x = (i / count) * W;
+      const y = baseY - Math.sin(i * 0.9 + seed) * amp * 0.35 - r() * amp;
+      pts.push([x, y]);
+    }
+    return pts;
+  }
+  // 平滑曲線（二次貝茲取中點），封底
+  function smoothPath(pts) {
+    let d = `M0 ${H} L${pts[0][0]} ${pts[0][1]}`;
+    for (let i = 1; i < pts.length; i++) {
+      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+      d += ` Q${x0} ${y0} ${(x0 + x1) / 2} ${(y0 + y1) / 2}`;
+    }
+    const last = pts[pts.length - 1];
+    return d + ` L${last[0]} ${last[1]} L${W} ${H} Z`;
+  }
+  // 尖峰山（剪紙常見的折線）
+  function jaggedPath(pts) {
+    return `M0 ${H} ` + pts.map(p => `L${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ') + ` L${W} ${H} Z`;
+  }
+  function yAt(pts, x) {
+    for (let i = 1; i < pts.length; i++) {
+      if (x <= pts[i][0]) {
+        const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
+        return y0 + (y1 - y0) * ((x - x0) / (x1 - x0));
+      }
+    }
+    return pts[pts.length - 1][1];
+  }
+  // 松樹剪影
+  function pine(x, baseY, h) {
+    const w = h * 0.42, tiers = 3;
+    let d = `M${x - 3} ${baseY} L${x - 3} ${baseY - h * 0.12} L${x + 3} ${baseY - h * 0.12} L${x + 3} ${baseY} Z `;
+    for (let t = 0; t < tiers; t++) {
+      const top = baseY - h * (0.45 + t * 0.27) - h * 0.12;
+      const bot = baseY - h * 0.12 - t * h * 0.24;
+      const tw = w * (1 - t * 0.25);
+      d += `M${x} ${top} L${x + tw / 2} ${bot} L${x - tw / 2} ${bot} Z `;
+    }
+    return d;
+  }
+  // 前景草葉
+  function blade(x, baseY, h, lean) {
+    const w = h * 0.09;
+    return `M${x - w} ${baseY} Q${x - w * 0.3 + lean * 0.4} ${baseY - h * 0.6} ${x + lean} ${baseY - h} Q${x + w * 0.3 + lean * 0.4} ${baseY - h * 0.55} ${x + w} ${baseY} Z `;
+  }
+
+  // --- 圖層定義：由遠到近 ---
+  const L = [];
+
+  // 0 太陽/月亮 + 雲
+  L.push({ name: '月亮', depth: 0.05, tag: [0.72, 0.18], svg: `
+    <circle cx="1010" cy="190" r="70" fill="#f6f1e4"/>
+    <circle cx="1010" cy="190" r="100" fill="#f6f1e4" opacity=".18"/>` });
+
+  L.push({ name: '雲', depth: 0.12, tag: [0.18, 0.2], svg: `
+    <path d="M180 230 q30 -45 80 -30 q25 -40 80 -20 q55 -10 60 40 q35 5 25 40 H170 q-40 -10 10 -30Z" fill="#eef2f1"/>
+    <path d="M760 300 q20 -30 60 -22 q25 -30 65 -8 q40 0 38 30 H740 q-20 -5 20 0Z" fill="#e6ecec"/>` });
+
+  // 遠山
+  const p1 = ridgePoints(3, 470, 170, 16);
+  L.push({ name: '遠山', depth: 0.2, tag: [0.08, 0.42], svg: `<path d="${jaggedPath(p1)}" fill="#89a7ba"/>` });
+
+  // 中山
+  const p2 = ridgePoints(11, 540, 140, 10);
+  L.push({ name: '中景山丘', depth: 0.38, tag: [0.55, 0.52], svg: `<path d="${smoothPath(p2)}" fill="#5f8299"/>` });
+
+  // 樹林
+  const p3 = ridgePoints(27, 640, 70, 8);
+  let trees = '';
+  { const r = rng(5);
+    for (let x = 20; x < W; x += 34 + r() * 40) {
+      const h = 90 + r() * 110;
+      trees += pine(x, yAt(p3, x) + 6, h);
+    } }
+  L.push({ name: '樹林', depth: 0.6, tag: [0.3, 0.6], svg: `
+    <path d="${smoothPath(p3)}" fill="#3c5d75"/>
+    <path d="${trees}" fill="#3c5d75"/>` });
+
+  // 近景丘陵
+  const p4 = ridgePoints(41, 730, 60, 6);
+  L.push({ name: '近景丘陵', depth: 0.82, tag: [0.7, 0.8], svg: `<path d="${smoothPath(p4)}" fill="#26435a"/>` });
+
+  // 前景草葉（左右兩叢）
+  let grass = '';
+  { const r = rng(9);
+    for (let i = 0; i < 26; i++) {
+      const left = i < 13;
+      const x = left ? 20 + r() * 260 : W - 20 - r() * 260;
+      grass += blade(x, H + 10, 140 + r() * 200, (left ? 1 : -1) * (20 + r() * 60));
+    } }
+  L.push({ name: '前景草葉', depth: 1, tag: [0.06, 0.78], svg: `<path d="${grass}" fill="#142a3b"/>` });
+
+  // --- 建立 DOM ---
+  const grain = scene.querySelector('.paper-grain');
+  const layers = L.map((def, i) => {
+    const el = document.createElement('div');
+    el.className = 'layer shadowed';
+    el.dataset.depth = def.depth;
+    el.style.zIndex = i + 1;
+    el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMax slice" aria-hidden="true">${def.svg}</svg>
+      <span class="tag" style="left:${def.tag[0] * 100}%;top:${def.tag[1] * 100}%">${def.name} · depth ${def.depth}</span>`;
+    scene.insertBefore(el, grain);
+    return { el, depth: def.depth };
+  });
+  // 天空（depth 0）不需要動，所以直接用 scene 背景
+  grain.style.zIndex = 40;
+
+  // --- 控制項 ---
+  const $ = id => document.getElementById(id);
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const opt = {
+    amp: reduce ? 12 : 40,
+    ease: 0.08,
+    drift: !reduce,
+    vertical: true,
+    invertX: true,   // true = 圖層往滑鼠反方向移
+    invertY: true,
+  };
+  document.querySelectorAll('input[name="dirX"]').forEach(r =>
+    r.addEventListener('change', e => { opt.invertX = e.target.value === 'invert'; wake(); }));
+  document.querySelectorAll('input[name="dirY"]').forEach(r =>
+    r.addEventListener('change', e => { opt.invertY = e.target.value === 'invert'; wake(); }));
+  $('amp').value = opt.amp;
+  $('drift').checked = opt.drift;
+  const syncOut = () => {
+    $('ampOut').textContent = opt.amp + 'px';
+    $('easeOut').textContent = opt.ease.toFixed(2);
+  };
+  syncOut();
+  $('amp').addEventListener('input', e => { opt.amp = +e.target.value; syncOut(); wake(); });
+  $('ease').addEventListener('input', e => { opt.ease = +e.target.value; syncOut(); wake(); });
+  $('tags').addEventListener('change', e => scene.classList.toggle('show-tags', e.target.checked));
+  $('shadow').addEventListener('change', e => layers.forEach(l => l.el.classList.toggle('shadowed', e.target.checked)));
+  $('drift').addEventListener('change', e => { opt.drift = e.target.checked; wake(); });
+  $('vertical').addEventListener('change', e => { opt.vertical = e.target.checked; wake(); });
+
+  // --- 視差核心 ---
+  const target = { x: 0, y: 0 }, current = { x: 0, y: 0 };
+  let lastInput = -Infinity, running = false, visible = true;
+  const readout = $('readout');
+
+  function onPointer(e) {
+    const r = scene.getBoundingClientRect();
+    // 以場景中心為 0，正規化到 -1 ~ 1（場景外也延續，但夾住上限）
+    const clamp = v => Math.max(-1, Math.min(1, v));
+    target.x = clamp(((e.clientX - r.left) / r.width) * 2 - 1);
+    target.y = clamp(((e.clientY - r.top) / r.height) * 2 - 1);
+    lastInput = performance.now();
+    wake();
+  }
+  window.addEventListener('pointermove', onPointer, { passive: true });
+  scene.addEventListener('pointerdown', onPointer, { passive: true });
+  // 滑鼠離開視窗時回到中心
+  document.addEventListener('mouseout', e => {
+    if (!e.relatedTarget) { target.x = 0; target.y = 0; wake(); }
+  });
+
+  function tick(now) {
+    // 閒置 2.5 秒後，目標改成緩慢的 8 字形飄動
+    const idle = now - lastInput > 2500;
+    if (opt.drift && idle) {
+      const t = now / 1000;
+      target.x = Math.sin(t * 0.35) * 0.55;
+      target.y = Math.sin(t * 0.7) * 0.25;
+    }
+
+    current.x += (target.x - current.x) * opt.ease;
+    current.y += (target.y - current.y) * opt.ease;
+
+    const sx = opt.invertX ? -1 : 1, sy = opt.invertY ? -1 : 1;
+    for (const l of layers) {
+      const tx = sx * current.x * l.depth * opt.amp;
+      const ty = opt.vertical ? sy * current.y * l.depth * opt.amp * 0.6 : 0;
+      l.el.style.transform = `translate3d(${tx.toFixed(2)}px, ${ty.toFixed(2)}px, 0)`;
+    }
+    readout.textContent = `x ${current.x.toFixed(2)} · y ${current.y.toFixed(2)}`;
+
+    const settled = Math.abs(target.x - current.x) < 0.0005 && Math.abs(target.y - current.y) < 0.0005;
+    if ((settled && !(opt.drift && idle)) || !visible || document.hidden) {
+      running = false;   // 靜止或看不到時停掉迴圈，省電
+      return;
+    }
+    requestAnimationFrame(tick);
+  }
+  function wake() {
+    if (!running && visible && !document.hidden) {
+      running = true;
+      requestAnimationFrame(tick);
+    }
+  }
+  new IntersectionObserver(([en]) => { visible = en.isIntersecting; wake(); }).observe(scene);
+  document.addEventListener('visibilitychange', wake);
+  wake();
+})();
+</script>
+
+</body></html>
